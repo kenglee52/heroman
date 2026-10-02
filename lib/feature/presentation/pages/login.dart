@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:heroman/authentication/login_service.dart';
+import 'package:heroman/main.dart';
 
 class Login extends StatefulWidget {
   const Login({super.key});
@@ -23,11 +25,28 @@ class _LoginState extends State<Login> {
     super.dispose();
   }
 
-  void _login() {
+  Future<void> _login() async {
     if (_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('ກຳລັງເຂົ້າສູ່ລະບົບ...')));
+      final result = await LoginService().login(
+        phone: _telController.text,
+        password: _passwordController.text,
+      );
+      if (result.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.green,
+            content: Text("${result.message}"),
+          ),
+        );
+        Navigator.pushReplacementNamed(context, AppRoutes.main_layout);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red,
+            content: Text("${result.message}"),
+          ),
+        );
+      }
     }
   }
 
@@ -83,7 +102,6 @@ class _LoginState extends State<Login> {
                   ),
                   child: Column(
                     children: [
-                      // ===== Logo =====
                       SafeArea(
                         bottom: false,
                         child: Padding(
@@ -106,8 +124,6 @@ class _LoginState extends State<Login> {
                                     ),
                                   ],
                                 ),
-                                // Replace with your logo:
-                                // child: Image.asset('assets/logo.png', width: 70, height: 70),
                                 child: const Icon(
                                   Icons.shield_rounded,
                                   size: 60,
@@ -128,8 +144,6 @@ class _LoginState extends State<Login> {
                           ),
                         ),
                       ),
-
-                      // ===== Form (fills the remaining space) =====
                       Expanded(
                         child: Container(
                           width: double.infinity,
@@ -246,7 +260,12 @@ class _LoginState extends State<Login> {
                                       ),
                                     ),
                                     TextButton(
-                                      onPressed: () {},
+                                      onPressed: () {
+                                        Navigator.pushNamed(
+                                          context,
+                                          AppRoutes.register,
+                                        );
+                                      },
                                       child: const Text(
                                         'ສະໝັກສະມາຊິກ',
                                         style: TextStyle(

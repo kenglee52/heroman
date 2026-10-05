@@ -23,8 +23,7 @@ class LoginService {
   static const String tokenKey = 'access_token';
   static const String userIdKey = 'user_id';
   static const String roleKey = 'role';
-
-
+  
   Future<LoginResult> login({
     required String phone,
     required String password,

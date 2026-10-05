@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:heroman/feature/domain/entities/mechanic.dart';
 import 'package:heroman/feature/presentation/bloc/job_bloc.dart';
+import 'package:heroman/feature/presentation/bloc/mechanic_bloc.dart';
 import 'package:heroman/utils/address.dart';
 import 'package:heroman/utils/cloudinary_upload.dart';
 import 'package:image_picker/image_picker.dart';
@@ -32,14 +34,10 @@ class _RegisterState extends State<Register> {
   final _specialty = TextEditingController();
   final _village = TextEditingController();
   final _documentId = TextEditingController();
+  final _serviceArea = TextEditingController();
 
   static const _genders = ['ຊາຍ', 'ຍິງ'];
-  static const _documentTypes = [
-    'ບັດປະຈຳຕົວ',
-    'ໜັງສືຜ່ານແດນ',
-    'ສຳມະໂນຄົວ',
-    'ໃບຂັບຂີ່',
-  ];
+  static const _documentTypes = ['ບັດປະຈຳຕົວ', 'ໜັງສືຜ່ານແດນ', 'ສຳມະໂນຄົວ'];
 
   String? _gender;
   DateTime? _birth;
@@ -47,6 +45,8 @@ class _RegisterState extends State<Register> {
   String? _district;
   String? _job;
   String? _documentType;
+  DateTime? _issue;
+  DateTime? _expiry;
 
   XFile? _profile;
   XFile? _certificate;
@@ -75,6 +75,7 @@ class _RegisterState extends State<Register> {
     }
     super.dispose();
   }
+
   List<String> get _districts {
     if (_province == null) return [];
     final p = Address.addresses.firstWhere((e) => e['province'] == _province);
@@ -104,8 +105,39 @@ class _RegisterState extends State<Register> {
     if (d != null) setState(() => _birth = d);
   }
 
-  bool _picking = false;
+  /// ເລືອກວັນທີອອກເອກະສານ (ບໍ່ເກີນມື້ນີ້)
+  Future<void> _pickIssue() async {
+    final now = DateTime.now();
+    final d = await showDatePicker(
+      context: context,
+      initialDate: _issue ?? now,
+      firstDate: DateTime(1990),
+      lastDate: now,
+      helpText: 'ວັນທີອອກເອກະສານ',
+    );
+    if (d == null) return;
+    setState(() {
+      _issue = d;
+      // ຖ້າວັນໝົດອາຍຸບໍ່ຢູ່ຫຼັງວັນອອກ ໃຫ້ເລືອກໃໝ່
+      if (_expiry != null && !_expiry!.isAfter(d)) _expiry = null;
+    });
+  }
 
+  /// ເລືອກວັນທີໝົດອາຍຸ (ຕ້ອງຢູ່ຫຼັງວັນທີອອກ)
+  Future<void> _pickExpiry() async {
+    final now = DateTime.now();
+    final first = (_issue ?? now).add(const Duration(days: 1));
+    final d = await showDatePicker(
+      context: context,
+      initialDate: _expiry ?? first,
+      firstDate: first,
+      lastDate: DateTime(now.year + 50),
+      helpText: 'ວັນທີເອກະສານໝົດອາຍຸ',
+    );
+    if (d != null) setState(() => _expiry = d);
+  }
+
+  bool _picking = false;
 
   Future<void> _guardPick(Future<void> Function() action) async {
     if (_picking) return;
@@ -132,10 +164,19 @@ class _RegisterState extends State<Register> {
     if (files.isEmpty || !mounted) return;
     setState(() => target.addAll(files));
   });
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_profile == null) return _snack('ກະລຸນາເລືອກຮູບໂປຣໄຟລ໌');
     if (_birth == null) return _snack('ກະລຸນາເລືອກວັນເກີດ');
+    if (_issue == null) return _snack('ກະລຸນາເລືອກວັນທີອອກເອກະສານ');
+    if (_expiry == null) return _snack('ກະລຸນາເລືອກວັນທີເອກະສານໝົດອາຍຸ');
+    if (!_expiry!.isAfter(_issue!)) {
+      return _snack('ວັນໝົດອາຍຸຕ້ອງຢູ່ຫຼັງວັນທີອອກເອກະສານ');
+    }
+    if (!_expiry!.isAfter(DateTime.now())) {
+      return _snack('ເອກະສານນີ້ໝົດອາຍຸແລ້ວ');
+    }
     if (_documents.isEmpty) return _snack('ກະລຸນາອັບໂຫລດເອກະສານ');
 
     setState(() => _loading = true);
@@ -150,36 +191,40 @@ class _RegisterState extends State<Register> {
       ]);
 
       final certificateUrl = results[1] as String;
-      final body = {
-        'name': _name.text.trim(),
-        'lastname': _lastname.text.trim(),
-        'gender': _gender,
-        'birth': _fmt(_birth!),
-        'phone': _phone.text.trim(),
-        'email': _email.text.trim(),
-        'password': _password.text,
-        'experienceYears': int.tryParse(_experience.text.trim()) ?? 0,
-        'specialties': _specialty.text.trim(),
-        'profile': results[0],
-        'province': _province,
-        'district': _district,
-        'village': _village.text.trim(),
-        if (certificateUrl.isNotEmpty) 'certificate': certificateUrl,
-        'job': _job,
-        'chievements': results[2],
-        'documentType': _documentType,
-        'documentId': _documentId.text.trim(),
-        'documentImage': results[3],
-      };
 
-      // TODO: ເອີ້ນ API register ຂອງເຈົ້າຢູ່ບ່ອນນີ້ ໂດຍສົ່ງ body ນີ້ໄປ
-      // ຕົວຢ່າງ: final res = await YourService().register(body);
-      debugPrint(body.toString());
+      final mechanic = Mechanic(
+        name: _name.text.trim(),
+        lastname: _lastname.text.trim(),
+        gender: _gender!,
+        birth: _fmt(_birth!),
+        phone: _phone.text.trim(),
+        email: _email.text.trim(),
+        password: _password.text,
+        experienceYears: int.tryParse(_experience.text.trim()) ?? 0,
+        specialties: _specialty.text.trim(),
+        isActive: true,
+        profile: results[0] as String,
+        province: _province!,
+        district: _district!,
+        village: _village.text.trim(),
+        certificate: certificateUrl.isEmpty ? null : certificateUrl,
+        job: _job!,
+        chievements: results[2] as List<String>,
+        serviceArea: _serviceArea.text,
+        documentType: _documentType!,
+        documentId: _documentId.text.trim(),
+        issue: _fmt(_issue!),
+        expiry: _fmt(_expiry!),
+        documentImage: results[3] as List<String>,
+      );
+
       if (!mounted) return;
+      context.read<MechanicBloc>().add(CreateMechanicEvent(mechanic: mechanic));
     } catch (e) {
-      if (mounted) _snack(e.toString());
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+        _snack(e.toString());
+      }
     }
   }
 
@@ -260,6 +305,41 @@ class _RegisterState extends State<Register> {
                     ? (requiredMsg ?? 'ກະລຸນາປ້ອນ$label')
                     : null
               : null),
+    );
+  }
+
+  Widget _dateField({
+    required String hint,
+    required IconData icon,
+    required DateTime? value,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 58,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF3F6F9),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.grey, width: 0.2),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                value == null ? hint : _fmt(value),
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: value == null ? Colors.grey.shade600 : Colors.black87,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -423,11 +503,25 @@ class _RegisterState extends State<Register> {
       ],
     );
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
         children: [
+          BlocListener<MechanicBloc, MechanicState>(
+            listener: (context, state) {
+              if (state is MechanicCreated) {
+                setState(() => _loading = false);
+                _snack('ສະໝັກສະມາຊິກສຳເລັດ', error: false);
+                Navigator.pop(context);
+              } else if (state is MechanicError) {
+                setState(() => _loading = false);
+                _snack(state.message);
+              }
+            },
+            child: const SizedBox.shrink(),
+          ),
           Container(
             width: double.infinity,
             height: double.infinity,
@@ -679,7 +773,7 @@ class _RegisterState extends State<Register> {
         items: Address.addresses.map((e) => e['province'] as String).toList(),
         onChanged: (v) => setState(() {
           _province = v;
-          _district = null; 
+          _district = null;
         }),
       ),
       const SizedBox(height: 14),
@@ -771,6 +865,16 @@ class _RegisterState extends State<Register> {
       _label('ຜົນງານ / ຜົນສຳເລັດ', optional: true),
       _multiImage(_achievements, 'ເພີ່ມຮູບ'),
 
+      const SizedBox(height: 14,),
+       _text(
+        _serviceArea,
+        'ເຂດບໍລິການ ຕົວຢ່າງ: ບໍລິການທົ່ວນະຄອນຫຼວງ',
+        Icons.design_services,
+        requiredMsg: 'ກະລຸນາປ້ອນເຂດບໍລິການ',
+      ),
+
+      const SizedBox(height: 18,),
+
       // ── ເອກະສານ ──
       _section(Icons.verified_user_outlined, 'ຢືນຢັນຕົວຕົນ'),
       _dropdown(
@@ -787,6 +891,28 @@ class _RegisterState extends State<Register> {
         'ເລກທີເອກະສານ',
         Icons.numbers,
         requiredMsg: 'ກະລຸນາປ້ອນເລກທີເອກະສານ',
+      ),
+      const SizedBox(height: 14),
+      Row(
+        children: [
+          Expanded(
+            child: _dateField(
+              hint: 'ວັນທີອອກ',
+              icon: Icons.event_available_outlined,
+              value: _issue,
+              onTap: _pickIssue,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _dateField(
+              hint: 'ວັນໝົດອາຍຸ',
+              icon: Icons.event_busy_outlined,
+              value: _expiry,
+              onTap: _pickExpiry,
+            ),
+          ),
+        ],
       ),
       const SizedBox(height: 18),
       _label('ຮູບເອກະສານ (ໜ້າ-ຫຼັງ)'),

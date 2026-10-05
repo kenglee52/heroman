@@ -8,7 +8,7 @@ class Mechanic {
   final String email;
   final String password;
   final int? experienceYears;
-  final List? specialties;
+  final String? specialties;
   final bool isActive;
   final String? profile;
   final String province;
@@ -17,8 +17,11 @@ class Mechanic {
   final String? certificate;
   final String job;
   final List? chievements;
+  final String serviceArea;
   final String documentType;
   final String documentId;
+  final String issue;
+  final String expiry;
   final List documentImage;
 
   Mechanic({
@@ -40,8 +43,11 @@ class Mechanic {
     this.certificate,
     required this.job,
     this.chievements,
+    required this.serviceArea,
     required this.documentType,
     required this.documentId,
-    required this.documentImage
+    required this.issue,
+    required this.expiry,
+    required this.documentImage,
   });
 }
